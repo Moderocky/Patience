@@ -41,6 +41,7 @@
             <groupId>org.valross</groupId>
             <artifactId>constantine</artifactId>
             <version>1.0.0</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.valross</groupId>
