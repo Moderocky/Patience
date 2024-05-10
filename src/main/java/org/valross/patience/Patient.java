@@ -2,7 +2,6 @@ package org.valross.patience;
 
 import org.valross.patience.error.Interruption;
 
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -10,10 +9,9 @@ import java.util.concurrent.TimeUnit;
  *
  * @param <Type>
  */
-public class Patient<Type> implements Slow, SafeFuture<Type> {
+public class Patient<Type> extends Lazy implements Slow, SafeFuture<Type> {
 
-    protected transient final Semaphore semaphore = new Semaphore(0);
-    protected volatile boolean complete = false, cancelled = false;
+    protected volatile boolean cancelled = false;
     protected volatile Type value;
     protected volatile Throwable error;
 
@@ -40,14 +38,10 @@ public class Patient<Type> implements Slow, SafeFuture<Type> {
         this.complete();
     }
 
-    /**
-     * Marks this task as having been completed and wakes anything
-     * pending its resolution.
-     */
+    @Override
     public void complete() {
-        this.complete = true;
         this.cancelled = false;
-        this.wake();
+        super.complete();
     }
 
     /**
@@ -73,10 +67,6 @@ public class Patient<Type> implements Slow, SafeFuture<Type> {
         if (issue != null) throw issue;
     }
 
-    protected void wake() {
-        this.semaphore.release(Short.MAX_VALUE);
-    }
-
     /**
      * Patient objects do not support a concept of 'failure' by default:
      * they are either complete or pending (or cancelled). Failure would be considered complete
@@ -93,8 +83,17 @@ public class Patient<Type> implements Slow, SafeFuture<Type> {
         return cancelled;
     }
 
-    public boolean isComplete() {
-        return complete;
+    @Override
+    public boolean await(boolean suppressInterruption) throws Interruption {
+        if (cancelled) return false;
+        return super.await(suppressInterruption);
+    }
+
+    @Override
+    public boolean await(long timeout, TimeUnit unit, boolean suppressInterruption)
+        throws Interruption {
+        if (cancelled) return false;
+        return super.await(timeout, unit, suppressInterruption);
     }
 
     @Override
@@ -148,37 +147,6 @@ public class Patient<Type> implements Slow, SafeFuture<Type> {
     @Override
     public Type resultNow() {
         return value;
-    }
-
-    @Override
-    public boolean await(boolean suppressInterruption) throws Interruption {
-        if (complete) return true;
-        if (cancelled) return false;
-        if (suppressInterruption)
-            this.semaphore.acquireUninterruptibly();
-        else try {
-            this.semaphore.acquire();
-        } catch (InterruptedException e) {
-            throw new Interruption(error = e);
-        }
-        return complete;
-    }
-
-    @Override
-    public boolean await(long timeout, TimeUnit unit, boolean suppressInterruption)
-        throws Interruption {
-        if (suppressInterruption) {
-            final long end = System.currentTimeMillis() + unit.toMillis(timeout);
-            do try {
-                return complete && this.semaphore.tryAcquire(end - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException _) {
-            } while (System.currentTimeMillis() < end);
-        } else try {
-            return complete && this.semaphore.tryAcquire(timeout, unit);
-        } catch (InterruptedException e) {
-            throw new Interruption(error = e);
-        }
-        return complete;
     }
 
     public static Patient<?> empty() {
