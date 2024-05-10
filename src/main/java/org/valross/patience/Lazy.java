@@ -77,11 +77,12 @@ public abstract class Lazy implements Slow {
         if (suppressInterruption) {
             final long end = System.currentTimeMillis() + unit.toMillis(timeout);
             do try {
-                return complete && this.sleeper.tryAcquire(end - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+                return this.sleeper.tryAcquire(end - System.currentTimeMillis(), TimeUnit.MILLISECONDS)
+                    && complete;
             } catch (InterruptedException _) {
             } while (System.currentTimeMillis() < end);
         } else try {
-            return complete && this.sleeper.tryAcquire(timeout, unit);
+            return this.sleeper.tryAcquire(timeout, unit) && complete;
         } catch (InterruptedException e) {
             this.consumeError(e);
             throw new Interruption(e);
